@@ -4,9 +4,14 @@ on:
   workflow_dispatch:
     inputs:
       custom_tag:
-        description: 'Custom tag identifier for the Flatpak build'
+        description: 'Custom version/tag identifier for the Flatpak release'
         required: false
-        default: 'test_build'
+        default: '0.10.35'
+  release:
+    types: [published]
+
+permissions:
+  contents: write
 
 jobs:
   build-flatpak-test:
@@ -68,13 +73,18 @@ jobs:
         pip wheel --wheel-dir installer/wheels --find-links ~/.cache/wxpython-wheels-cp313 .
 
     - name: Build Flatpak Bundle
+      id: flatpak_meta
       run: |
         sudo apt-get install -y flatpak flatpak-builder
         flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
 
-        RAW_TAG="${{ inputs.custom_tag || github.event.release.tag_name || 'test_build' }}"
+        RAW_TAG="${{ inputs.custom_tag || github.event.release.tag_name || '0.10.35' }}"
         TAG="${RAW_TAG//./_}"
         TAG="${TAG//-/_}"
+
+        echo "raw_tag=${RAW_TAG}" >> "$GITHUB_OUTPUT"
+        echo "release_tag=v${RAW_TAG#v}-flatpak" >> "$GITHUB_OUTPUT"
+        echo "app_id=com.amuletmc.amulet_map_editor_${TAG}" >> "$GITHUB_OUTPUT"
 
         # Create Desktop Entry
         cat << EOF > "installer/com.amuletmc.amulet_map_editor_${TAG}.desktop"
@@ -93,10 +103,25 @@ jobs:
         # Compile and Bundle Flatpak
         flatpak-builder --force-clean --user --install-deps-from=flathub --repo=repo --install builddir "installer/com.amuletmc.amulet_map_editor_${TAG}.yml"
         mkdir -p installer/dist
-        flatpak build-bundle repo "installer/dist/Amulet-Test-${RAW_TAG}-x86_64.flatpak" "com.amuletmc.amulet_map_editor_${TAG}" --runtime-repo=https://flathub.org/repo/flathub.flatpakrepo
+        flatpak build-bundle repo "installer/dist/Amulet-${RAW_TAG}-x86_64.flatpak" "com.amuletmc.amulet_map_editor_${TAG}" --runtime-repo=https://flathub.org/repo/flathub.flatpakrepo
 
     - name: Upload Flatpak Artifact
       uses: actions/upload-artifact@v4
       with:
         name: Amulet-Test-Flatpak-Bundle
-        path: ./installer/dist
+        path: ./installer/dist/*.flatpak
+
+    - name: Publish to GitHub Releases
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ github.event.release.tag_name || steps.flatpak_meta.outputs.release_tag }}
+        name: "Amulet Map Editor ${{ steps.flatpak_meta.outputs.raw_tag }} (Flatpak)"
+        body: |
+          ### Flatpak Standalone Bundle
+          - **Install:** `flatpak install --user Amulet-${{ steps.flatpak_meta.outputs.raw_tag }}-x86_64.flatpak`
+          - **Run:** `flatpak run ${{ steps.flatpak_meta.outputs.app_id }}`
+        files: installer/dist/*.flatpak
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
