@@ -93,13 +93,25 @@ jobs:
 
     - name: MacOS - Notarise DMG
       run: |
-        xcrun notarytool submit \
-          "installer/dist/Amulet-${{ github.event.release.tag_name }}-macOS-${{ matrix.cfg.architecture }}.dmg" \
+        DMG="installer/dist/Amulet-${{ github.event.release.tag_name }}-macOS-${{ matrix.cfg.architecture }}.dmg"
+    
+        xcrun notarytool submit "$DMG" \
           --keychain-profile "notary-profile" \
           --team-id "${{ secrets.APPLE_TEAM_ID }}" \
           --wait
-        xcrun stapler staple \
-          "installer/dist/Amulet-${{ github.event.release.tag_name }}-macOS-${{ matrix.cfg.architecture }}.dmg"
+    
+        for i in {1..10}; do
+          if xcrun stapler staple "$DMG"; then
+            echo "Stapled on attempt $i"
+            exit 0
+          fi
+          if [ "$i" -lt 10 ]; then
+            echo "Staple attempt $i failed, retrying in 30s..."
+            sleep 30
+          fi
+        done
+        echo "Stapling failed after 10 attempts"
+        exit 1
 
     - name: Publish to PyPi
       env:

@@ -1,10 +1,5 @@
 # Amulet Map Editor
 
-![Build](../../workflows/Build/badge.svg)
-![Unittests](../../workflows/Unittests/badge.svg?event=push)
-![Stylecheck](../../workflows/Stylecheck/badge.svg?event=push)
-[![Documentation Status](https://readthedocs.org/projects/amulet-map-editor/badge)](https://amulet-map-editor.readthedocs.io)
-
 A Minecraft world editor and converter that supports all versions since Java 1.12 and Bedrock 1.7.
 
 ![cover](resource/img/cover.jpg)
@@ -19,10 +14,6 @@ Run the installer and follow the instructions.
 **If you are running a compiled build you do NOT need to do this.**
 
 See instructions on [amuletmc.com](https://www.amuletmc.com/installing-from-source)
-
-## Running with Docker (Linux)
-The Docker image runs on any Linux distro with Docker support.\
-To run the Docker image, clone this repository and run `rundocker.sh`.\
 
 ## Legacy builds
 

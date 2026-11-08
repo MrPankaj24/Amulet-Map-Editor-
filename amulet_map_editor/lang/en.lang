@@ -155,6 +155,17 @@ key_config.active_not_editable=The active key group is not editable. Would you l
 program_about.tab_name=About
 program_about.currently_opened_world=Currently Opened World:
 program_about.choose_from_options=Choose from the options on the left what you would like to do.\nYou can switch between these at any time.
+program_about.compact_level=Compact Level
+program_about.compact_level_tooltip=This button removes unused data from the level to reduce its file size.
+program_about.compacting_level=Compacting Level
+program_about.repair_leveldb=Repair LevelDB Database
+program_about.repair_leveldb_tooltip=This button scans the LevelDB database and tries to repair corrupt data.
+program_about.repair_leveldb_confirm=This operation will scan the LevelDB database and try to repair corrupt data.\nThis is only necessary if you have experienced LevelDB exceptions.\nDo you want to continue?
+program_about.repairing_leveldb=Repairing LevelDB Database Level. Please wait.
+program_about.export_mcworld=Export as .mcworld File
+program_about.export_mcworld_tooltip=This button exports the world as an .mcworld file to a path you choose.
+program_about.export_mcworld_message=Select path to export .mcworld file to:
+program_about.export_mcworld_exporting=Exporting .mcworld file. Please wait.
 
 # Convert
 ## The program used to convert a world
