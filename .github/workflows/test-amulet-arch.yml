@@ -1,0 +1,124 @@
+name: Test Build - Arch & Portable
+
+on:
+  workflow_dispatch:
+    inputs:
+      custom_version:
+        description: 'Version number for the package (must start with a number for pacman)'
+        required: false
+        default: '0.10.35'
+
+jobs:
+  build-arch-test:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+    - name: Clone Repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Setup CMake
+      uses: jwlawson/actions-setup-cmake@v2
+
+    - name: Install Python Build Tools
+      run: |
+        pip install pyinstaller~=6.18 build
+
+    - name: Install System Dependencies & wxPython
+      run: |
+        sudo apt-get update && sudo apt-get install -y \
+          libgtk-3-0 \
+          dbus-x11 \
+          libnotify4 \
+          libsdl2-2.0-0 \
+          libsm6 \
+          libcurl4 \
+          libsecret-1-0 \
+          libpcre2-32-0 \
+          xdg-utils \
+          libopengl0 \
+          libgl1 \
+          libgl1-mesa-dri \
+          libegl1 \
+          libegl-mesa0 \
+          ruby-full \
+          zstd \
+          libarchive-tools
+        pip install https://extras.wxpython.org/wxPython4/extras/linux/gtk3/ubuntu-24.04/wxpython-4.2.5-cp311-cp311-linux_x86_64.whl
+
+    - name: Compile Amulet Wheel
+      run: |
+        export BDISTWHEELFREEZELIBS=true
+        python -m build
+        python -m pip install dist/amulet_map_editor-*.whl --upgrade
+
+    - name: Build Standalone Executable (PyInstaller)
+      run: |
+        python -m PyInstaller -y --distpath ./installer/dist installer/Amulet.spec
+
+    - name: Package for Arch (.pkg.tar.zst) & Portable (.tar.gz)
+      run: |
+        sudo gem install fpm
+        
+        RAW_VER="${{ inputs.custom_version || github.event.release.tag_name || '0.10.35' }}"
+        VERSION="${RAW_VER#v}"
+        
+        # 1. Create Portable Tarball
+        tar -czf "installer/dist/Amulet-Test-${VERSION}-Portable-x86_64.tar.gz" -C installer/dist amulet
+
+        # 2. Stage Arch Package Directory
+        mkdir -p installer/dist/pkg/opt
+        cp -r installer/dist/amulet installer/dist/pkg/opt/amulet_map_editor
+        
+        mkdir -p installer/dist/pkg/usr/share/icons/hicolor/512x512/apps
+        cp installer/amulet_logo_512.png installer/dist/pkg/usr/share/icons/hicolor/512x512/apps/amulet_map_editor.png
+        
+        mkdir -p installer/dist/pkg/usr/share/applications
+        cat << 'EOF' > installer/dist/pkg/usr/share/applications/amulet_map_editor.desktop
+        [Desktop Entry]
+        Type=Application
+        Name=Amulet Map Editor
+        Comment=A Minecraft world editor and converter that supports all versions since Java 1.12 and Bedrock 1.7.
+        Path=/opt/amulet_map_editor
+        Exec=/opt/amulet_map_editor/amulet
+        Icon=amulet_map_editor
+        Categories=Game;Utility;
+        EOF
+        sed -i 's/^[ \t]*//' installer/dist/pkg/usr/share/applications/amulet_map_editor.desktop
+        
+        # Set File Permissions
+        find installer/dist/pkg/opt/amulet_map_editor -type f -exec chmod 644 -- {} +
+        find installer/dist/pkg/opt/amulet_map_editor -type d -exec chmod 755 -- {} +
+        find installer/dist/pkg/usr/share -type f -exec chmod 644 -- {} +
+        chmod +x installer/dist/pkg/opt/amulet_map_editor/amulet
+        if [ -f installer/dist/pkg/opt/amulet_map_editor/amulet_debug ]; then
+          chmod +x installer/dist/pkg/opt/amulet_map_editor/amulet_debug
+        fi
+        
+        # Build Arch Pacman Package
+        fpm \
+          --chdir installer/dist/pkg \
+          --input-type dir \
+          --output-type pacman \
+          --name "amulet-map-editor-test" \
+          --version "${VERSION}" \
+          --description "A Minecraft world editor and converter (Test Build)" \
+          --url https://www.amuletmc.com \
+          --architecture x86_64 \
+          --package "installer/dist/Amulet-Test-${VERSION}-Arch-x86_64.pkg.tar.zst"
+        
+        rm -rf installer/dist/amulet
+        rm -rf installer/dist/pkg
+
+    - name: Upload Test Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: Amulet-Test-Arch-Packages
+        path: ./installer/dist
