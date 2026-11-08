@@ -4,9 +4,14 @@ on:
   workflow_dispatch:
     inputs:
       custom_version:
-        description: 'Version number for the package (must start with a number for pacman)'
+        description: 'Version number for the package and release tag (e.g., 0.10.35)'
         required: false
         default: '0.10.35'
+  release:
+    types: [published]
+
+permissions:
+  contents: write
 
 jobs:
   build-arch-test:
@@ -96,14 +101,17 @@ jobs:
         python -m PyInstaller -y --distpath ./installer/dist installer/Amulet.spec
 
     - name: Package for Arch (.pkg.tar.zst) & Portable (.tar.gz)
+      id: package_meta
       run: |
         sudo gem install fpm
         
         RAW_VER="${{ inputs.custom_version || github.event.release.tag_name || '0.10.35' }}"
         VERSION="${RAW_VER#v}"
+        echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+        echo "tag=v${VERSION}-arch" >> "$GITHUB_OUTPUT"
         
         # 1. Create Portable Tarball
-        tar -czf "installer/dist/Amulet-Test-${VERSION}-Portable-x86_64.tar.gz" -C installer/dist amulet
+        tar -czf "installer/dist/Amulet-${VERSION}-Portable-x86_64.tar.gz" -C installer/dist amulet
 
         # 2. Stage Arch Package Directory
         mkdir -p installer/dist/pkg/opt
@@ -139,18 +147,35 @@ jobs:
           --chdir installer/dist/pkg \
           --input-type dir \
           --output-type pacman \
-          --name "amulet-map-editor-test" \
+          --name "amulet-map-editor" \
           --version "${VERSION}" \
-          --description "A Minecraft world editor and converter (Test Build)" \
+          --description "A Minecraft world editor and converter" \
           --url https://www.amuletmc.com \
           --architecture x86_64 \
-          --package "installer/dist/Amulet-Test-${VERSION}-Arch-x86_64.pkg.tar.zst"
+          --package "installer/dist/Amulet-${VERSION}-Arch-x86_64.pkg.tar.zst"
         
         rm -rf installer/dist/amulet
         rm -rf installer/dist/pkg
 
-    - name: Upload Test Artifacts
+    - name: Upload Build Artifacts
       uses: actions/upload-artifact@v4
       with:
         name: Amulet-Test-Arch-Packages
-        path: ./installer/dist
+        path: ./installer/dist/*
+
+    - name: Publish to GitHub Releases
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ github.event.release.tag_name || steps.package_meta.outputs.tag }}
+        name: "Amulet Map Editor ${{ steps.package_meta.outputs.version }} (Arch Linux & Portable)"
+        body: |
+          ### Arch Linux & Portable Direct Build
+          - **Arch Linux Pacman Package:** `sudo pacman -U Amulet-${{ steps.package_meta.outputs.version }}-Arch-x86_64.pkg.tar.zst`
+          - **Portable Tarball:** `tar -xzf Amulet-${{ steps.package_meta.outputs.version }}-Portable-x86_64.tar.gz && ./amulet/amulet`
+        files: |
+          installer/dist/*.pkg.tar.zst
+          installer/dist/*.tar.gz
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
