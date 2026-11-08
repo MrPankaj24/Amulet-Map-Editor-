@@ -20,25 +20,42 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Set up Python 3.11
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.11'
+        cache: 'pip'
 
     - name: Setup CMake
       uses: jwlawson/actions-setup-cmake@v2
 
+    - name: Cache wxPython Wheel
+      id: cache-wxpython
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/wxpython-wheels
+        key: wxpython-cp311-ubuntu-24.04-v4.2.5
+
     - name: Install Python Build Tools
       run: |
-        pip install pyinstaller~=6.18 build
+        pip install --upgrade pip
+        pip install pyinstaller~=6.18 build attrdict3
 
     - name: Install System Dependencies & wxPython
       run: |
         sudo apt-get update && sudo apt-get install -y \
           libgtk-3-0 \
+          libgtk-3-dev \
+          libwebkit2gtk-4.1-dev \
+          libgstreamer1.0-dev \
+          libgstreamer-plugins-base1.0-dev \
+          freeglut3-dev \
           dbus-x11 \
           libnotify4 \
+          libnotify-dev \
           libsdl2-2.0-0 \
+          libsdl2-dev \
           libsm6 \
+          libsm-dev \
           libcurl4 \
           libsecret-1-0 \
           libpcre2-32-0 \
@@ -48,10 +65,25 @@ jobs:
           libgl1-mesa-dri \
           libegl1 \
           libegl-mesa0 \
+          libxtst-dev \
           ruby-full \
           zstd \
           libarchive-tools
-        pip install https://extras.wxpython.org/wxPython4/extras/linux/gtk3/ubuntu-24.04/wxpython-4.2.5-cp311-cp311-linux_x86_64.whl
+
+        mkdir -p ~/.cache/wxpython-wheels
+        WHEEL_FILE=~/.cache/wxpython-wheels/wxpython-4.2.5-cp311-cp311-linux_x86_64.whl
+        WHEEL_URL="https://extras.wxpython.org/wxPython4/extras/linux/gtk3/ubuntu-24.04/wxpython-4.2.5-cp311-cp311-linux_x86_64.whl"
+
+        if [ ! -f "$WHEEL_FILE" ]; then
+          echo "Attempting to download prebuilt wxPython wheel with extended timeout..."
+          if ! curl -L --connect-timeout 60 --max-time 600 --retry 5 --retry-delay 10 --retry-all-errors -o "$WHEEL_FILE" "$WHEEL_URL"; then
+            echo "extras.wxpython.org is down/unreachable. Building wxPython wheel locally (will be cached for future runs)..."
+            rm -f "$WHEEL_FILE"
+            pip wheel --wheel-dir ~/.cache/wxpython-wheels wxPython==4.2.5
+          fi
+        fi
+
+        pip install ~/.cache/wxpython-wheels/wx[pP]ython*.whl
 
     - name: Compile Amulet Wheel
       run: |
